@@ -28,10 +28,10 @@ flamegraph(){
                                         BPF_TOOLS_NODE=$1
                                         ;;
                 -p | --pod )           shift
-                                        BPF_TOOLS_POD=$1
+                                        TARGET_WORKLOAD_POD=$1
                                         ;;
                 -c | --container ) shift
-                                        BPF_TOOLS_CONTAINER=$1
+                                        TARGET_WORKLOAD_CONTAINER=$1
                                         ;;
                 -i | --image-for-profiler ) shift
                                         BPF_TOOLS_IMAGE=$1
@@ -50,16 +50,16 @@ flamegraph(){
 
     bpfprofilername=ebpf-profiler
     [ -z "${BPF_TOOLS_NODE}" ] && echo 'missing --node, try --help' && return 1
-    [ -z "${BPF_TOOLS_POD}" ] && echo 'missing --pod, try --help' && return 1
-    [ -z "${BPF_TOOLS_CONTAINER}" ] && echo 'missing --container, try --help' && return 1
+    [ -z "${TARGET_WORKLOAD_POD}" ] && echo 'missing --pod, try --help' && return 1
+    [ -z "${TARGET_WORKLOAD_CONTAINER}" ] && echo 'missing --container, try --help' && return 1
     [ -z "${BPF_TOOLS_IMAGE}" ] && echo 'missing --image-for-profiler, try --help' && return 1
     [ -z "${BPF_TOOLS_SECONDS}" ] && BPF_TOOLS_SECONDS=30 && return 1
 
     cat ./ebpf-profiler.yaml | \
     sed 's@{{BPF_TOOLS_IMAGE}}@'"$BPF_TOOLS_IMAGE"'@' | \
-    sed 's@{{BPF_TOOLS_POD}}@'"$BPF_TOOLS_POD"'@' | \
+    sed 's@{{TARGET_WORKLOAD_POD}}@'"$TARGET_WORKLOAD_POD"'@' | \
     sed 's@{{BPF_TOOLS_SECONDS}}@'"$BPF_TOOLS_SECONDS"'@' | \
-    sed 's@{{BPF_TOOLS_CONTAINER}}@'"$BPF_TOOLS_CONTAINER"'@' | \
+    sed 's@{{TARGET_WORKLOAD_CONTAINER}}@'"$TARGET_WORKLOAD_CONTAINER"'@' | \
     sed 's@{{BPF_TOOLS_NODE}}@'"$BPF_TOOLS_NODE"'@' | \
     kubectl apply -f -
 
@@ -72,15 +72,15 @@ flamegraph(){
 
     #wait for profiler to complete
     completed_flag=""
-    echo "profiling pod ${BPF_TOOLS_POD} ..."
+    echo "profiling pod ${TARGET_WORKLOAD_POD} ..."
     while [ -z "$completed_flag" ]; do
         completed_flag=$(kubectl logs $bpfprofilername | grep "profiling complete")
         [ -z "$completed_flag" ] && sleep 5
     done
 
     #get the svg
-    kubectl cp ${bpfprofilername}:/work/${BPF_TOOLS_CONTAINER}.svg ./${BPF_TOOLS_CONTAINER}.svg 2>/dev/null
-    echo "created ${BPF_TOOLS_CONTAINER}.svg"
+    kubectl cp ${bpfprofilername}:/work/${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.svg ./${TARGET_WORKLOAD_CONTAINER}.svg 2>/dev/null
+    echo "created ${TARGET_WORKLOAD_CONTAINER}.svg"
 
     kubectl delete po $bpfprofilername
     echo "done"

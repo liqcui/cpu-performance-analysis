@@ -4,6 +4,7 @@ metadata:
   name: ebpf-profiler
 spec:
   hostPID: true
+  hostNetwork: true
   containers:
   - name: ebpf-profiler
     image: {{BPF_TOOLS_IMAGE}}
@@ -14,43 +15,50 @@ spec:
     - "/bin/bash"
     - "-c"
     - |-
-      BPF_TOOLS_CONTAINERID=$(docker ps | grep k8s_${BPF_TOOLS_CONTAINER}_${BPF_TOOLS_POD} | awk '{print $1}')
-      BPF_TOOLS_PID=$(docker inspect $BPF_TOOLS_CONTAINERID --format '{{ .State.Pid }}')
+      TARGET_WORKLOAD_CONTAINERID=$(crictl ps |grep ${TARGET_WORKLOAD_CONTAINER} | awk '{print $1}' )
+      BPF_TOOLS_PID=$(crictl inspect --output go-template --template '{{.info.pid}}' $TARGET_WORKLOAD_CONTAINERID)
       echo "profiling pid $BPF_TOOLS_PID for seconds $BPF_TOOLS_SECONDS"
       BPF_TOOLS_SECONDS=$(echo $BPF_TOOLS_SECONDS | sed s/\"//g)
-      ./bcc/tools/profile.py -dF 99 -f $BPF_TOOLS_SECONDS -p $BPF_TOOLS_PID | ./FlameGraph/flamegraph.pl > ${BPF_TOOLS_CONTAINER}.svg
+      /usr/share/bcc/tools/profile -dF 99 -f $BPF_TOOLS_SECONDS -p $BPF_TOOLS_PID | ./FlameGraph/flamegraph.pl > ${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.svg
+      #sleep 30s
+      #perf record -F 99 -p $BPF_TOOLS_PID -g -- sleep $BPF_TOOLS_SECONDS
+      #perf script report flamegraph
       echo "profiling complete"
-      sleep 30s #gives our script chance to copy out the flamegraph
+      sleep 300s #gives our script chance to copy out the flamegraph
+      
     env:
     - name: BPF_TOOLS_SECONDS
       value: "{{BPF_TOOLS_SECONDS}}"
-    - name: BPF_TOOLS_POD
-      value: {{BPF_TOOLS_POD}}
-    - name: BPF_TOOLS_CONTAINER
-      value: {{BPF_TOOLS_CONTAINER}}
+    - name: TARGET_WORKLOAD_POD
+      value: {{TARGET_WORKLOAD_POD}}
+    - name: TARGET_WORKLOAD_CONTAINER
+      value: {{TARGET_WORKLOAD_CONTAINER}}
     volumeMounts:
-      - mountPath: /var/run/docker.sock
-        name: docker
-      - mountPath: /sys/kernel/debug
-        name: kernel-debug
-      - mountPath: /sys/fs/cgroup
-        name: fs-cgroup
-      - mountPath: /sys/fs/bpf
-        name: fs-bpf
+      - mountPath: /run/crio/crio.sock
+        name: crio            
+      - mountPath: /etc/crictl.yaml
+        name: crictl-yaml
+      - mountPath: /sys/
+        name: os-sys
+      - mountPath: /usr/src
+        name: usr-src
+      - mountPath: /lib/modules
+        name: lib-mod
   nodeSelector:
     kubernetes.io/hostname: {{BPF_TOOLS_NODE}} # you can bind to a specific agent
-  imagePullSecrets:
-  - name: registrykey
   volumes:
-    - name: docker
+    - name: crio
       hostPath: 
-        path: /var/run/docker.sock
-    - name: kernel-debug
+        path: /run/crio/crio.sock
+    - name: crictl-yaml
+      hostPath: 
+        path: /etc/crictl.yaml
+    - name: os-sys
       hostPath:
-        path: /sys/kernel/debug
-    - name: fs-cgroup
+        path: /sys/
+    - name: usr-src
       hostPath:
-        path: /sys/fs/cgroup
-    - name: fs-bpf
+        path: /usr/src
+    - name: lib-mod
       hostPath:
-        path: /sys/fs/bpf
+        path: /lib/modules
