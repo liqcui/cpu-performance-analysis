@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dump-pmap
+spec:
+  hostPID: true
+  hostNetwork: true
+  containers:
+  - name: dump-pmap
+    image: {{BPF_TOOLS_IMAGE}}
+    imagePullPolicy: Always
+    securityContext:
+      privileged: true
+    command:
+    - "/bin/bash"
+    - "-c"
+    - |-
+      TARGET_WORKLOAD_CONTAINERID=$(crictl ps |grep ${TARGET_WORKLOAD_CONTAINER} | awk '{print $1}' )
+      TARGET_WORKLOAD_PID=$(crictl inspect --output go-template --template '{{.info.pid}}' $TARGET_WORKLOAD_CONTAINERID)
+      echo "dump-pmap pid $TARGET_WORKLOAD_PID for seconds $BPF_TOOLS_SECONDS"
+      BPF_TOOLS_SECONDS=$(echo $BPF_TOOLS_SECONDS | sed s/\"//g)
+      mkdir -p dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}
+      cd dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}
+      chmod +x /work/dump-process-memory-bypid.sh
+      /work/dump-process-memory-bypid.sh $${TARGET_WORKLOAD_PID}
+      cd ..
+      tar cvf dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.tar dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}
+      gzip dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.tar
+      echo "dump-pmap complete"
+      sleep 600s #gives our script chance to copy out the flamegraph
+      
+    env:
+    - name: BPF_TOOLS_SECONDS
+      value: "{{BPF_TOOLS_SECONDS}}"
+    - name: TARGET_WORKLOAD_POD
+      value: {{TARGET_WORKLOAD_POD}}
+    - name: TARGET_WORKLOAD_CONTAINER
+      value: {{TARGET_WORKLOAD_CONTAINER}}
+    volumeMounts:
+      - mountPath: /run/crio/crio.sock
+        name: crio            
+      - mountPath: /etc/crictl.yaml
+        name: crictl-yaml
+      - mountPath: /sys/
+        name: os-sys
+      - mountPath: /usr/src
+        name: usr-src
+      - mountPath: /lib/modules
+        name: lib-mod
+  nodeSelector:
+    kubernetes.io/hostname: {{BPF_TOOLS_NODE}} # you can bind to a specific agent
+  volumes:
+    - name: crio
+      hostPath: 
+        path: /run/crio/crio.sock
+    - name: crictl-yaml
+      hostPath: 
+        path: /etc/crictl.yaml
+    - name: os-sys
+      hostPath:
+        path: /sys/
+    - name: usr-src
+      hostPath:
+        path: /usr/src
+    - name: lib-mod
+      hostPath:
+        path: /lib/modules

@@ -48,14 +48,14 @@ flamegraph(){
             shift
     done
 
-    bpfprofilername=ebpf-profiler
+    bpfprofilername=dump-pmap
     [ -z "${BPF_TOOLS_NODE}" ] && echo 'missing --node, try --help' && return 1
     [ -z "${TARGET_WORKLOAD_POD}" ] && echo 'missing --pod, try --help' && return 1
     [ -z "${TARGET_WORKLOAD_CONTAINER}" ] && echo 'missing --container, try --help' && return 1
     [ -z "${BPF_TOOLS_IMAGE}" ] && echo 'missing --image-for-profiler, try --help' && return 1
     [ -z "${BPF_TOOLS_SECONDS}" ] && BPF_TOOLS_SECONDS=30 && return 1
 
-    cat ./ebpf-profiler.yaml | \
+    cat ./dump-pmap.yaml | \
     sed 's@{{BPF_TOOLS_IMAGE}}@'"$BPF_TOOLS_IMAGE"'@' | \
     sed 's@{{TARGET_WORKLOAD_POD}}@'"$TARGET_WORKLOAD_POD"'@' | \
     sed 's@{{BPF_TOOLS_SECONDS}}@'"$BPF_TOOLS_SECONDS"'@' | \
@@ -72,14 +72,15 @@ flamegraph(){
 
     #wait for profiler to complete
     completed_flag=""
-    echo "profiling pod ${TARGET_WORKLOAD_POD} ..."
+    echo "dump-pmap pod ${TARGET_WORKLOAD_POD} ..."
     while [ -z "$completed_flag" ]; do
-        completed_flag=$(kubectl logs $bpfprofilername | grep "profiling complete")
+        completed_flag=$(kubectl logs $bpfprofilername | grep "dump-pmap complete")
         [ -z "$completed_flag" ] && sleep 5
     done
 
     #get the svg
-    kubectl cp ${bpfprofilername}:/work/${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.svg ./${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.svg 2>/dev/null
+
+    kubectl cp ${bpfprofilername}:/work/dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.tar.gz ./dump-pmap-${TARGET_WORKLOAD_POD}-${TARGET_WORKLOAD_CONTAINER}.tar.gz 2>/dev/null
     echo "created ${TARGET_WORKLOAD_CONTAINER}.svg"
 
     kubectl delete po $bpfprofilername
