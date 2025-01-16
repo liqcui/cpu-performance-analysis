@@ -15,7 +15,7 @@ spec:
     - "/bin/bash"
     - "-c"
     - |-
-      TARGET_WORKLOAD_CONTAINERID=$(crictl ps |grep ${TARGET_WORKLOAD_CONTAINER} | awk '{print $1}' )
+      TARGET_WORKLOAD_CONTAINERID=$(crictl ps --label io.kubernetes.container.name=${TARGET_WORKLOAD_CONTAINER} |grep -v NAME| awk '{print $1}' )
       BPF_TOOLS_PID=$(crictl inspect --output go-template --template '{{.info.pid}}' $TARGET_WORKLOAD_CONTAINERID)
       echo "profiling pid $BPF_TOOLS_PID for seconds $BPF_TOOLS_SECONDS"
       BPF_TOOLS_SECONDS=$(echo $BPF_TOOLS_SECONDS | sed s/\"//g)
